@@ -47,5 +47,6 @@
 		"Undispatched",
 		"unregistration"
 	],
-	"task.allowAutomaticTasks": "on"
+	"task.allowAutomaticTasks": "on",
+	"editor.formatOnSave": false,
 }

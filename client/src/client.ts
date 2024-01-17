@@ -8,15 +8,16 @@ import * as path from 'path';
 
 import {
 	workspace as Workspace, window as Window, languages as Languages, Uri, TextDocument, CodeActionContext, Diagnostic,
-	Command, CodeAction, MessageItem, ConfigurationTarget, env as Env, CodeActionKind, WorkspaceConfiguration, NotebookCell, commands,
-	ExtensionContext, LanguageStatusItem, LanguageStatusSeverity, DocumentFilter as VDocumentFilter
-} from 'vscode';
+	Command, CodeAction, MessageItem, CodeActionKind, WorkspaceConfiguration,  commands,
+	ExtensionContext,   DocumentFilter as VDocumentFilter,
+} from 'coc.nvim';
+
+import { ConfigurationTarget } from './patch';
 
 import {
 	LanguageClient, LanguageClientOptions, TransportKind, ErrorHandler, CloseAction, RevealOutputChannelOn, ServerOptions, DocumentFilter,
-	DidCloseTextDocumentNotification, DidOpenTextDocumentNotification, State, VersionedTextDocumentIdentifier, ExecuteCommandParams,
-	ExecuteCommandRequest, ConfigurationParams, NotebookDocumentSyncRegistrationType
-} from 'vscode-languageclient/node';
+	State, ConfigurationParams
+} from 'coc.nvim';
 
 import { LegacyDirectoryItem, Migration, PatternItem, ValidateItem } from './settings';
 import { ExitCalled, NoConfigRequest, NoESLintLibraryRequest, OpenESLintDocRequest, ProbeFailedRequest, ShowOutputChannel, Status, StatusNotification, StatusParams } from './shared/customMessages';
@@ -43,7 +44,8 @@ export class Validator {
 			return Validate.off;
 		}
 
-		if (textDocument.uri.scheme === 'untitled' && config.get<boolean>('ignoreUntitled', false)) {
+		// if (textDocument.uri.scheme === 'untitled' && config.get<boolean>('ignoreUntitled', false)) {
+		if (textDocument.uri === '' && config.get<boolean>('ignoreUntitled', false)) {
 			return Validate.off;
 		}
 
@@ -105,7 +107,7 @@ export namespace ESLintClient {
 		if (folder === undefined) {
 			return;
 		}
-		const migration = new Migration(folder.uri);
+		const migration = new Migration(Uri.file(folder.uri));
 		migration.record();
 		if (migration.needsUpdate()) {
 			try {
@@ -138,15 +140,15 @@ export namespace ESLintClient {
 		// Filters for client options
 		const packageJsonFilter: DocumentFilter = { scheme: 'file', pattern: '**/package.json' };
 		const configFileFilter: DocumentFilter = { scheme: 'file', pattern: '**/{.eslintr{c.js,c.yaml,c.yml,c,c.json},eslint.config.js}' };
-		const supportedQuickFixKinds: Set<string> = new Set([CodeActionKind.Source.value, CodeActionKind.SourceFixAll.value, `${CodeActionKind.SourceFixAll.value}.eslint`, CodeActionKind.QuickFix.value]);
+		const supportedQuickFixKinds: Set<string> = new Set([CodeActionKind.Source, CodeActionKind.SourceFixAll, `${CodeActionKind.SourceFixAll}.eslint`, CodeActionKind.QuickFix]);
 
 		// A map of documents synced to the server
 		const syncedDocuments: Map<string, TextDocument> = new Map();
 		// The actual ESLint client
-		const client: LanguageClient = new LanguageClient('ESLint', createServerOptions(context.extensionUri), createClientOptions());
+		const client: LanguageClient = new LanguageClient('ESLint', createServerOptions(Uri.file(context.extensionPath)), createClientOptions());
 
 		// The default error handler.
-		const defaultErrorHandler: ErrorHandler = client.createDefaultErrorHandler();
+		// const defaultErrorHandler: ErrorHandler = client.createDefaultErrorHandler();
 		// Whether the server call process.exit() which is intercepted and reported to
 		// the client
 		let serverCalledProcessExit: boolean = false;
@@ -156,18 +158,19 @@ export namespace ESLintClient {
 		// The actual migration code if any.
 		let migration: Migration | undefined;
 		// Whether migration should happen now
-		let notNow: boolean = false;
+		const notNow: boolean = false;
+
 
 		// The client's status bar item.
-		const languageStatus: LanguageStatusItem = Languages.createLanguageStatusItem('eslint.languageStatusItem', []);
+		// const languageStatus: LanguageStatusItem = Languages.createLanguageStatusItem('eslint.languageStatusItem', []);
 		let serverRunning: boolean | undefined;
 
 		const starting = 'ESLint server is starting.';
 		const running = 'ESLint server is running.';
 		const stopped = 'ESLint server stopped.';
-		languageStatus.name = 'ESLint';
-		languageStatus.text = 'ESLint';
-		languageStatus.command = { title: 'Open ESLint Output', command: 'eslint.showOutputChannel' };
+		// languageStatus.name = 'ESLint';
+		// languageStatus.text = 'ESLint';
+		// languageStatus.command = { title: 'Open ESLint Output', command: 'eslint.showOutputChannel' };
 		type StatusInfo = Omit<Omit<StatusParams, 'uri'>, 'validationTime'> & {
 		};
 		const documentStatus: Map<string, StatusInfo> = new Map();
@@ -177,29 +180,29 @@ export namespace ESLintClient {
 		// list of probe language type can change.
 		context.subscriptions.push(Workspace.onDidChangeConfiguration(() => {
 			validator.clear();
-			for (const textDocument of syncedDocuments.values()) {
-				if (validator.check(textDocument) === Validate.off) {
-					const provider = client.getFeature(DidCloseTextDocumentNotification.method).getProvider(textDocument);
-					provider?.send(textDocument).catch((error) => client.error(`Sending close notification failed.`, error));
-				}
-			}
-			for (const textDocument of Workspace.textDocuments) {
-				if (!syncedDocuments.has(textDocument.uri.toString()) && validator.check(textDocument) !== Validate.off) {
-					const provider = client.getFeature(DidOpenTextDocumentNotification.method).getProvider(textDocument);
-					provider?.send(textDocument).catch((error) => client.error(`Sending open notification failed.`, error));
-				}
-			}
+			// for (const textDocument of syncedDocuments.values()) {
+			// 	if (validator.check(textDocument) === Validate.off) {
+			// 		const provider = client.getFeature(DidCloseTextDocumentNotification.method).getProvider(textDocument);
+			// 		provider?.send(textDocument).catch((error) => client.error(`Sending close notification failed.`, error));
+			// 	}
+			// }
+			// for (const textDocument of Workspace.textDocuments) {
+			// 	if (!syncedDocuments.has(textDocument.uri.toString()) && validator.check(textDocument) !== Validate.off) {
+			// 		const provider = client.getFeature(DidOpenTextDocumentNotification.method).getProvider(textDocument);
+			// 		provider?.send(textDocument).catch((error) => client.error(`Sending open notification failed.`, error));
+			// 	}
+			// }
 		}));
 
-		client.onNotification(ShowOutputChannel.type, () => {
+		client.onNotification(ShowOutputChannel.type.method, () => {
 			client.outputChannel.show();
 		});
 
-		client.onNotification(StatusNotification.type, (params) => {
+		client.onNotification(StatusNotification.type.method, (params) => {
 			updateDocumentStatus(params);
 		});
 
-		client.onNotification(ExitCalled.type, (params) => {
+		client.onNotification(ExitCalled.type.method, (params) => {
 			serverCalledProcessExit = true;
 			client.error(`Server process exited with code ${params[0]}. This usually indicates a misconfigured ESLint setup.`, params[1]);
 			void Window.showErrorMessage(`ESLint server shut down itself. See 'ESLint' output channel for details.`, { title: 'Open Output', id: 1}).then((value) => {
@@ -209,129 +212,129 @@ export namespace ESLintClient {
 			});
 		});
 
-		client.onRequest(NoConfigRequest.type, (params) => {
-			const document = Uri.parse(params.document.uri);
-			const workspaceFolder = Workspace.getWorkspaceFolder(document);
-			const fileLocation = document.fsPath;
-			if (workspaceFolder) {
-				client.warn([
-					'',
-					`No ESLint configuration (e.g .eslintrc) found for file: ${fileLocation}`,
-					`File will not be validated. Consider running 'eslint --init' in the workspace folder ${workspaceFolder.name}`,
-					`Alternatively you can disable ESLint by executing the 'Disable ESLint' command.`
-				].join('\n'));
-			} else {
-				client.warn([
-					'',
-					`No ESLint configuration (e.g .eslintrc) found for file: ${fileLocation}`,
-					`File will not be validated. Alternatively you can disable ESLint by executing the 'Disable ESLint' command.`
-				].join('\n'));
-			}
+		client.onRequest(NoConfigRequest.type.method, (params) => {
+			// const document = Uri.parse(params.document.uri);
+			// const workspaceFolder = Workspace.getWorkspaceFolder(document.fsPath);
+			// const fileLocation = document.fsPath;
+			// if (workspaceFolder) {
+			// 	client.warn([
+			// 		'',
+			// 		`No ESLint configuration (e.g .eslintrc) found for file: ${fileLocation}`,
+			// 		`File will not be validated. Consider running 'eslint --init' in the workspace folder ${workspaceFolder.name}`,
+			// 		`Alternatively you can disable ESLint by executing the 'Disable ESLint' command.`
+			// 	].join('\n'));
+			// } else {
+			// 	client.warn([
+			// 		'',
+			// 		`No ESLint configuration (e.g .eslintrc) found for file: ${fileLocation}`,
+			// 		`File will not be validated. Alternatively you can disable ESLint by executing the 'Disable ESLint' command.`
+			// 	].join('\n'));
+			// }
 
-			updateDocumentStatus({ uri: params.document.uri, state: Status.error });
+			// updateDocumentStatus({ uri: params.document.uri, state: Status.error });
 			return {};
 		});
 
-		client.onRequest(NoESLintLibraryRequest.type, async (params) => {
-			const key = 'noESLintMessageShown';
-			const state = context.globalState.get<NoESLintState>(key, {});
+		client.onRequest(NoESLintLibraryRequest.type.method, async (params) => {
+			// const key = 'noESLintMessageShown';
+			// const state = context.globalState.get<NoESLintState>(key, {});
 
-			const uri: Uri = Uri.parse(params.source.uri);
-			const workspaceFolder = Workspace.getWorkspaceFolder(uri);
-			const packageManager = await getPackageManager(uri);
-			const localInstall = {
-				npm: 'npm install eslint',
-				pnpm: 'pnpm install eslint',
-				yarn: 'yarn add eslint',
-			};
-			const globalInstall = {
-				npm: 'npm install -g eslint',
-				pnpm: 'pnpm install -g eslint',
-				yarn: 'yarn global add eslint'
-			};
-			const isPackageManagerNpm = packageManager === 'npm';
-			interface ButtonItem extends MessageItem {
-				id: number;
-			}
-			const outputItem: ButtonItem = {
-				title: 'Go to output',
-				id: 1
-			};
-			if (workspaceFolder) {
-				client.info([
-					'',
-					`Failed to load the ESLint library for the document ${uri.fsPath}`,
-					'',
-					`To use ESLint please install eslint by running ${localInstall[packageManager]} in the workspace folder ${workspaceFolder.name}`,
-					`or globally using '${globalInstall[packageManager]}'. You need to reopen the workspace after installing eslint.`,
-					'',
-					isPackageManagerNpm ? 'If you are using yarn or pnpm instead of npm set the setting `eslint.packageManager` to either `yarn` or `pnpm`' : null,
-					`Alternatively you can disable ESLint for the workspace folder ${workspaceFolder.name} by executing the 'Disable ESLint' command.`
-				].filter((str => (str !== null))).join('\n'));
+			// const uri: Uri = Uri.parse(params.source.uri);
+			// const workspaceFolder = Workspace.getWorkspaceFolder(uri.fsPath);
+			// const packageManager = await getPackageManager(uri);
+			// const localInstall = {
+			// 	npm: 'npm install eslint',
+			// 	pnpm: 'pnpm install eslint',
+			// 	yarn: 'yarn add eslint',
+			// };
+			// const globalInstall = {
+			// 	npm: 'npm install -g eslint',
+			// 	pnpm: 'pnpm install -g eslint',
+			// 	yarn: 'yarn global add eslint'
+			// };
+			// const isPackageManagerNpm = packageManager === 'npm';
+			// interface ButtonItem extends MessageItem {
+			// 	id: number;
+			// }
+			// const outputItem: ButtonItem = {
+			// 	title: 'Go to output',
+			// 	id: 1
+			// };
+			// if (workspaceFolder) {
+			// 	client.info([
+			// 		'',
+			// 		`Failed to load the ESLint library for the document ${uri.fsPath}`,
+			// 		'',
+			// 		`To use ESLint please install eslint by running ${localInstall[packageManager]} in the workspace folder ${workspaceFolder.name}`,
+			// 		`or globally using '${globalInstall[packageManager]}'. You need to reopen the workspace after installing eslint.`,
+			// 		'',
+			// 		isPackageManagerNpm ? 'If you are using yarn or pnpm instead of npm set the setting `eslint.packageManager` to either `yarn` or `pnpm`' : null,
+			// 		`Alternatively you can disable ESLint for the workspace folder ${workspaceFolder.name} by executing the 'Disable ESLint' command.`
+			// 	].filter((str => (str !== null))).join('\n'));
 
-				if (state.workspaces === undefined) {
-					state.workspaces = {};
-				}
-				if (!state.workspaces[workspaceFolder.uri.toString()]) {
-					state.workspaces[workspaceFolder.uri.toString()] = true;
-					void context.globalState.update(key, state);
-					void Window.showInformationMessage(`Failed to load the ESLint library for the document ${uri.fsPath}. See the output for more information.`, outputItem).then((item) => {
-						if (item && item.id === 1) {
-							client.outputChannel.show(true);
-						}
-					});
-				}
-			} else {
-				client.info([
-					`Failed to load the ESLint library for the document ${uri.fsPath}`,
-					`To use ESLint for single JavaScript file install eslint globally using '${globalInstall[packageManager]}'.`,
-					isPackageManagerNpm ? 'If you are using yarn or pnpm instead of npm set the setting `eslint.packageManager` to either `yarn` or `pnpm`' : null,
-					'You need to reopen VS Code after installing eslint.',
-				].filter((str => (str !== null))).join('\n'));
+			// 	if (state.workspaces === undefined) {
+			// 		state.workspaces = {};
+			// 	}
+			// 	if (!state.workspaces[workspaceFolder.uri.toString()]) {
+			// 		state.workspaces[workspaceFolder.uri.toString()] = true;
+			// 		void context.globalState.update(key, state);
+			// 		void Window.showInformationMessage(`Failed to load the ESLint library for the document ${uri.fsPath}. See the output for more information.`, outputItem).then((item) => {
+			// 			if (item && item.id === 1) {
+			// 				client.outputChannel.show(true);
+			// 			}
+			// 		});
+			// 	}
+			// } else {
+			// 	client.info([
+			// 		`Failed to load the ESLint library for the document ${uri.fsPath}`,
+			// 		`To use ESLint for single JavaScript file install eslint globally using '${globalInstall[packageManager]}'.`,
+			// 		isPackageManagerNpm ? 'If you are using yarn or pnpm instead of npm set the setting `eslint.packageManager` to either `yarn` or `pnpm`' : null,
+			// 		'You need to reopen VS Code after installing eslint.',
+			// 	].filter((str => (str !== null))).join('\n'));
 
-				if (!state.global) {
-					state.global = true;
-					void context.globalState.update(key, state);
-					void Window.showInformationMessage(`Failed to load the ESLint library for the document ${uri.fsPath}. See the output for more information.`, outputItem).then((item) => {
-						if (item && item.id === 1) {
-							client.outputChannel.show(true);
-						}
-					});
-				}
-			}
+			// 	if (!state.global) {
+			// 		state.global = true;
+			// 		void context.globalState.update(key, state);
+			// 		void Window.showInformationMessage(`Failed to load the ESLint library for the document ${uri.fsPath}. See the output for more information.`, outputItem).then((item) => {
+			// 			if (item && item.id === 1) {
+			// 				client.outputChannel.show(true);
+			// 			}
+			// 		});
+			// 	}
+			// }
 			return {};
 		});
 
-		client.onRequest(OpenESLintDocRequest.type, async (params) => {
-			await commands.executeCommand('vscode.open', Uri.parse(params.url));
+		client.onRequest(OpenESLintDocRequest.type.method, async (params) => {
+			// await commands.executeCommand('vscode.open', Uri.parse(params.url));
 			return {};
 		});
 
-		client.onRequest(ProbeFailedRequest.type, (params) => {
-			validator.add(client.protocol2CodeConverter.asUri(params.textDocument.uri));
-			const closeFeature = client.getFeature(DidCloseTextDocumentNotification.method);
-			for (const document of Workspace.textDocuments) {
-				if (document.uri.toString() === params.textDocument.uri) {
-					closeFeature.getProvider(document)?.send(document).catch((error) => client.error(`Sending close notification failed`, error));
-				}
-			}
+		client.onRequest(ProbeFailedRequest.type.method, (params) => {
+			// validator.add(client.protocol2CodeConverter.asUri(params.textDocument.uri));
+			// const closeFeature = client.getFeature(DidCloseTextDocumentNotification.method);
+			// for (const document of Workspace.textDocuments) {
+			// 	if (document.uri.toString() === params.textDocument.uri) {
+			// 		closeFeature.getProvider(document)?.send(document).catch((error) => client.error(`Sending close notification failed`, error));
+			// 	}
+			// }
 		});
 
-		const notebookFeature = client.getFeature(NotebookDocumentSyncRegistrationType.method);
-		if (notebookFeature !== undefined) {
-			notebookFeature.register({
-				id: String(Date.now()),
-				registerOptions: {
-					notebookSelector: [{
-						notebook: { scheme: 'file' },
-						// We dynamically filter using the filterCells callback.
-						// To force the filtering match all cells for now.
-						// See also https://github.com/microsoft/vscode-languageserver-node/issues/1017
-						cells: [ { language: '*' } ]
-					}]
-				}
-			});
-		}
+		// const notebookFeature = client.getFeature(NotebookDocumentSyncRegistrationType.method);
+		// if (notebookFeature !== undefined) {
+		// 	notebookFeature.register({
+		// 		id: String(Date.now()),
+		// 		registerOptions: {
+		// 			notebookSelector: [{
+		// 				notebook: { scheme: 'file' },
+		// 				// We dynamically filter using the filterCells callback.
+		// 				// To force the filtering match all cells for now.
+		// 				// See also https://github.com/microsoft/vscode-languageserver-node/issues/1017
+		// 				cells: [ { language: '*' } ]
+		// 			}]
+		// 		}
+		// 	});
+		// }
 
 		client.onDidChangeState((event) => {
 			if (event.newState === State.Starting) {
@@ -362,16 +365,17 @@ export namespace ESLintClient {
 				if (!textEditor) {
 					return;
 				}
-				const textDocument: VersionedTextDocumentIdentifier = {
+				const textDocument = {
 					uri: textEditor.document.uri.toString(),
 					version: textEditor.document.version
 				};
-				const params: ExecuteCommandParams = {
+				const params  = {
 					command: 'eslint.applyAllFixes',
 					arguments: [textDocument]
 				};
 				await client.start();
-				client.sendRequest(ExecuteCommandRequest.type, params).then(undefined, () => {
+				// client.sendRequest(ExecuteCommandRequest.type.method, params).then(undefined, () => {
+				client.sendRequest('workspace/executeCommand', params).then(undefined, () => {
 					void Window.showErrorMessage('Failed to apply ESLint fixes to the document. Please consider opening an issue with steps to reproduce.');
 				});
 			})
@@ -380,7 +384,7 @@ export namespace ESLintClient {
 		return [client, acknowledgePerformanceStatus];
 
 		function createServerOptions(extensionUri: Uri): ServerOptions {
-			const serverModule = Uri.joinPath(extensionUri, 'server', 'out', 'eslintServer.js').fsPath;
+			const serverModule = path.resolve(extensionUri.fsPath, 'server', 'out', 'eslintServer.js');
 			const eslintConfig = Workspace.getConfiguration('eslint');
 			const debug = sanitize(eslintConfig.get<boolean>('debug', false) ?? false, 'boolean', false);
 			const runtime = sanitize(eslintConfig.get<string | null>('runtime', null) ?? undefined, 'string', undefined);
@@ -434,20 +438,21 @@ export namespace ESLintClient {
 					client.outputChannel.show(true);
 					return false;
 				},
-				errorHandler: {
-					error: (error, message, count) => {
-						return defaultErrorHandler.error(error, message, count);
-					},
-					closed: () => {
-						if (serverCalledProcessExit) {
-							return { action: CloseAction.DoNotRestart };
-						}
-						return defaultErrorHandler.closed();
-					}
-				},
+				// errorHandler: {
+				// error: (error, message, count) => {
+				// 	return defaultErrorHandler.error(error, message, count);
+				// },
+				// closed: () => {
+				// 	if (serverCalledProcessExit) {
+				// 		return { action: CloseAction.DoNotRestart };
+				// 	}
+				// 	return defaultErrorHandler.closed();
+				// }
+				// },
 				middleware: {
 					didOpen: async (document, next) => {
-						if (Languages.match(packageJsonFilter, document) || Languages.match(configFileFilter, document) || validator.check(document) !== Validate.off) {
+						// if (Languages.match(packageJsonFilter, document) || Languages.match(configFileFilter, document) || validator.check(document) !== Validate.off) {
+						if (validator.check(document) !== Validate.off) {
 							const result = next(document);
 							syncedDocuments.set(document.uri.toString(), document);
 
@@ -455,7 +460,7 @@ export namespace ESLintClient {
 						}
 					},
 					didChange: async (event, next) => {
-						if (syncedDocuments.has(event.document.uri.toString())) {
+						if (syncedDocuments.has(event.textDocument.uri.toString())) {
 							return next(event);
 						}
 					},
@@ -483,40 +488,11 @@ export namespace ESLintClient {
 							return next(document);
 						}
 					},
-					notebooks: {
-						didOpen: (notebookDocument, cells, next) => {
-							const result = next(notebookDocument, cells);
-							for (const cell of cells) {
-								syncedDocuments.set(cell.document.uri.toString(), cell.document);
-							}
-							return result;
-						},
-						didChange: (event, next) => {
-							if (event.cells?.structure?.didOpen !== undefined) {
-								for (const open of event.cells.structure.didOpen) {
-									syncedDocuments.set(open.document.uri.toString(), open.document);
-								}
-							}
-							if (event.cells?.structure?.didClose !== undefined) {
-								for (const closed of event.cells.structure.didClose) {
-									syncedDocuments.delete(closed.document.uri.toString());
-								}
-							}
-							return next(event);
-						},
-						didClose: (document, cells, next) => {
-							for (const cell of cells) {
-								const key = cell.document.uri.toString();
-								syncedDocuments.delete(key);
-							}
-							return next(document, cells);
-						}
-					},
 					provideCodeActions: async (document, range, context, token, next): Promise<(Command | CodeAction)[] | null | undefined> => {
 						if (!syncedDocuments.has(document.uri.toString())) {
 							return [];
 						}
-						if (context.only !== undefined && !supportedQuickFixKinds.has(context.only.value)) {
+						if (context.only !== undefined && !([...context.only.values()].every(value => supportedQuickFixKinds.has(value))) ) {
 							return [];
 						}
 						if (context.only === undefined && (!context.diagnostics || context.diagnostics.length === 0)) {
@@ -532,19 +508,19 @@ export namespace ESLintClient {
 							return [];
 						}
 						const newContext: CodeActionContext = Object.assign({}, context, { diagnostics: eslintDiagnostics });
-						const start = Date.now();
+						// const start = Date.now();
 						const result = await next(document, range, newContext, token);
-						if (context.only?.value.startsWith('source.fixAll')) {
-							let performanceInfo = performanceStatus.get(document.languageId);
-							if (performanceInfo === undefined) {
-								performanceInfo = PerformanceStatus.defaultValue;
-								performanceStatus.set(document.languageId, performanceInfo);
-							} else {
-								performanceInfo.firstReport = false;
-							}
-							performanceInfo.fixTime = Date.now() - start;
-							updateStatusBar(document);
-						}
+						// if (context.only?.value.startsWith('source.fixAll')) {
+						// 	let performanceInfo = performanceStatus.get(document.languageId);
+						// 	if (performanceInfo === undefined) {
+						// 		performanceInfo = PerformanceStatus.defaultValue;
+						// 		performanceStatus.set(document.languageId, performanceInfo);
+						// 	} else {
+						// 		performanceInfo.firstReport = false;
+						// 	}
+						// 	performanceInfo.fixTime = Date.now() - start;
+						// 	updateStatusBar(document);
+						// }
 						return result;
 					},
 					workspace: {
@@ -566,18 +542,6 @@ export namespace ESLintClient {
 						}
 					}
 				},
-				notebookDocumentOptions: {
-					filterCells: (_notebookDocument, cells) => {
-						const result: NotebookCell[] = [];
-						for (const cell of cells) {
-							const document = cell.document;
-							if (Languages.match(packageJsonFilter, document) || Languages.match(configFileFilter, document) || validator.check(document) !== Validate.off) {
-								result.push(cell);
-							}
-						}
-						return result;
-					}
-				}
 			};
 			return clientOptions;
 		}
@@ -589,7 +553,7 @@ export namespace ESLintClient {
 			if (userProvidedPackageManager === detectedPackageMananger) {
 				return detectedPackageMananger;
 			}
-			client.warn(`Detected package manager(${detectedPackageMananger}) differs from the one in the deprecated packageManager setting(${userProvidedPackageManager}). We will honor this setting until it is removed.`, {}, true);
+			client.warn(`Detected package manager(${detectedPackageMananger}) differs from the one in the deprecated packageManager setting(${userProvidedPackageManager}). We will honor this setting until it is removed.`, {});
 			return userProvidedPackageManager;
 		}
 
@@ -603,59 +567,59 @@ export namespace ESLintClient {
 					result.push(null);
 					continue;
 				}
-				const resource = client.protocol2CodeConverter.asUri(item.scopeUri);
+				const resource = Uri.parse(item.scopeUri);
 				const textDocument = getTextDocument(resource);
 				const config = Workspace.getConfiguration('eslint', textDocument ?? resource);
 				const workspaceFolder = resource.scheme === 'untitled'
 					? Workspace.workspaceFolders !== undefined ? Workspace.workspaceFolders[0] : undefined
-					: Workspace.getWorkspaceFolder(resource);
-				await migrationSemaphore.lock(async () => {
-					const globalMigration = Workspace.getConfiguration('eslint').get('migration.2_x', 'on');
-					if (notNow === false && globalMigration === 'on') {
-						try {
-							migration = new Migration(resource);
-							migration.record();
-							interface Item extends MessageItem {
-								id: 'yes' | 'no' | 'readme' | 'global' | 'local';
-							}
-							if (migration.needsUpdate()) {
-								const folder = workspaceFolder?.name;
-								const file = path.basename(resource.fsPath);
-								const selected = await Window.showInformationMessage<Item>(
-									[
-										`The ESLint 'autoFixOnSave' setting needs to be migrated to the new 'editor.codeActionsOnSave' setting`,
-										folder !== undefined ? `for the workspace folder: ${folder}.` : `for the file: ${file}.`,
-										`For compatibility reasons the 'autoFixOnSave' remains and needs to be removed manually.`,
-										`Do you want to migrate the setting?`
-									].join(' '),
-									{ modal: true},
-									{ id: 'yes', title: 'Yes'},
-									{ id: 'global', title: 'Never migrate Settings' },
-									{ id: 'readme', title: 'Open Readme' },
-									{ id: 'no', title: 'Not now', isCloseAffordance: true }
-								);
-								if (selected !== undefined) {
-									if (selected.id === 'yes') {
-										try {
-											await migration.update();
-										} catch (error) {
-											migrationFailed(client, error);
-										}
-									} else if (selected.id === 'no') {
-										notNow = true;
-									} else if (selected.id === 'global') {
-										await config.update('migration.2_x', 'off', ConfigurationTarget.Global);
-									} else if (selected.id === 'readme') {
-										notNow = true;
-										void Env.openExternal(Uri.parse('https://github.com/microsoft/vscode-eslint#settings-migration'));
-									}
-								}
-							}
-						} finally {
-							migration = undefined;
-						}
-					}
-				});
+					: Workspace.getWorkspaceFolder(resource.fsPath);
+				// await migrationSemaphore.lock(async () => {
+				// 	const globalMigration = Workspace.getConfiguration('eslint').get('migration.2_x', 'on');
+				// 	if (notNow === false && globalMigration === 'on') {
+				// 		try {
+				// 			migration = new Migration(resource);
+				// 			migration.record();
+				// 			interface Item extends MessageItem {
+				// 				id: 'yes' | 'no' | 'readme' | 'global' | 'local';
+				// 			}
+				// 			if (migration.needsUpdate()) {
+				// 				const folder = workspaceFolder?.name;
+				// 				const file = path.basename(resource.fsPath);
+				// 				const selected = await Window.showInformationMessage<Item>(
+				// 					[
+				// 						`The ESLint 'autoFixOnSave' setting needs to be migrated to the new 'editor.codeActionsOnSave' setting`,
+				// 						folder !== undefined ? `for the workspace folder: ${folder}.` : `for the file: ${file}.`,
+				// 						`For compatibility reasons the 'autoFixOnSave' remains and needs to be removed manually.`,
+				// 						`Do you want to migrate the setting?`
+				// 					].join(' '),
+				// 					{ modal: true},
+				// 					{ id: 'yes', title: 'Yes'},
+				// 					{ id: 'global', title: 'Never migrate Settings' },
+				// 					{ id: 'readme', title: 'Open Readme' },
+				// 					{ id: 'no', title: 'Not now', isCloseAffordance: true }
+				// 				);
+				// 				if (selected !== undefined) {
+				// 					if (selected.id === 'yes') {
+				// 						try {
+				// 							await migration.update();
+				// 						} catch (error) {
+				// 							migrationFailed(client, error);
+				// 						}
+				// 					} else if (selected.id === 'no') {
+				// 						notNow = true;
+				// 					} else if (selected.id === 'global') {
+				// 						await config.update('migration.2_x', 'off', ConfigurationTarget.Global);
+				// 					} else if (selected.id === 'readme') {
+				// 						notNow = true;
+				// 						void Env.openExternal(Uri.parse('https://github.com/microsoft/vscode-eslint#settings-migration'));
+				// 					}
+				// 				}
+				// 			}
+				// 		} finally {
+				// 			migration = undefined;
+				// 		}
+				// 	}
+				// });
 				const settings: ConfigurationSettings = {
 					validate: Validate.off,
 					packageManager: config.get<PackageManagers>('packageManager', 'npm'),
@@ -697,15 +661,15 @@ export namespace ESLintClient {
 					settings.codeActionOnSave.rules = CodeActionsOnSaveRules.from(config.get<string[] | null>('codeActionsOnSave.rules', null));
 				}
 				if (workspaceFolder !== undefined) {
-					settings.workspaceFolder = {
-						name: workspaceFolder.name,
-						uri: client.code2ProtocolConverter.asUri(workspaceFolder.uri)
-					};
+					// settings.workspaceFolder = {
+					// 	name: workspaceFolder.name,
+					// 	uri: client.code2ProtocolConverter.asUri(workspaceFolder.uri)
+					// };
 				}
 				const workingDirectories = config.get<(string | LegacyDirectoryItem | DirectoryItem | PatternItem | ModeItem)[] | undefined>('workingDirectories', undefined);
 				if (Array.isArray(workingDirectories)) {
 					let workingDirectory: ModeItem | DirectoryItem | undefined = undefined;
-					const workspaceFolderPath = workspaceFolder && workspaceFolder.uri.scheme === 'file' ? workspaceFolder.uri.fsPath : undefined;
+					const workspaceFolderPath = workspaceFolder && Uri.parse(workspaceFolder.uri).scheme === 'file' ? Uri.parse(workspaceFolder.uri).fsPath : undefined;
 					for (const entry of workingDirectories) {
 						let directory: string | undefined;
 						let pattern: string | undefined;
@@ -732,7 +696,8 @@ export namespace ESLintClient {
 
 						let itemValue: string | undefined;
 						if (directory !== undefined || pattern !== undefined) {
-							const filePath = document.uri.scheme === 'file' ? document.uri.fsPath : undefined;
+							const documentUri = Uri.parse(document.uri);
+							const filePath = documentUri.scheme === 'file' ? documentUri.fsPath : undefined;
 							if (filePath !== undefined) {
 								if (directory !== undefined) {
 									directory = toOSPath(directory);
@@ -844,7 +809,7 @@ export namespace ESLintClient {
 				};
 				selector.push(filter);
 			}
-			languageStatus.selector = selector;
+			// languageStatus.selector = selector;
 		}
 
 		function acknowledgePerformanceStatus(): void {
@@ -857,7 +822,7 @@ export namespace ESLintClient {
 				return;
 			}
 			performanceInfo.acknowledged = true;
-			updateStatusBar(activeTextDocument);
+			updateStatusBar(activeTextDocument.textDocument);
 		}
 
 		function updateStatusBar(textDocument: TextDocument | undefined) {
@@ -883,8 +848,8 @@ export namespace ESLintClient {
 				};
 			}
 
-			let severity: LanguageStatusSeverity = LanguageStatusSeverity.Information;
-			const [timeTaken, detail, message, timeBudget] = function(): [number, string | undefined, string, TimeBudget] {
+			// const severity: LanguageStatusSeverity = LanguageStatusSeverity.Information;
+			const [timeTaken] = function(): [number, string | undefined, string, TimeBudget] {
 				if (performanceInfo === undefined || performanceInfo.firstReport || performanceInfo.acknowledged) {
 					return [-1, undefined, '', { warn: 0, error: 0 }];
 				}
@@ -908,38 +873,38 @@ export namespace ESLintClient {
 				return [-1, undefined, '', { warn: 0, error: 0 }];
 			}();
 
-			switch (statusInfo.state) {
-				case Status.ok:
-					break;
-				case Status.warn:
-					severity = LanguageStatusSeverity.Warning;
-					break;
-				case Status.error:
-					severity = LanguageStatusSeverity.Error;
-					break;
-			}
-			if (severity === LanguageStatusSeverity.Information && timeTaken > timeBudget.warn) {
-				severity = LanguageStatusSeverity.Warning;
-			}
-			if (severity === LanguageStatusSeverity.Warning && timeTaken > timeBudget.error) {
-				severity = LanguageStatusSeverity.Error;
-			}
-			if (timeTaken > timeBudget.warn && performanceInfo !== undefined) {
-				if (timeTaken > performanceInfo.reported) {
-					if (timeTaken > timeBudget.error) {
-						client.error(message);
-					} else {
-						client.warn(message);
-					}
-				}
-			}
+			// switch (statusInfo.state) {
+			// 	case Status.ok:
+			// 		break;
+			// 	case Status.warn:
+			// 		severity = LanguageStatusSeverity.Warning;
+			// 		break;
+			// 	case Status.error:
+			// 		severity = LanguageStatusSeverity.Error;
+			// 		break;
+			// }
+			// if (severity === LanguageStatusSeverity.Information && timeTaken > timeBudget.warn) {
+			// 	severity = LanguageStatusSeverity.Warning;
+			// }
+			// if (severity === LanguageStatusSeverity.Warning && timeTaken > timeBudget.error) {
+			// 	severity = LanguageStatusSeverity.Error;
+			// }
+			// if (timeTaken > timeBudget.warn && performanceInfo !== undefined) {
+			// 	if (timeTaken > performanceInfo.reported) {
+			// 		if (timeTaken > timeBudget.error) {
+			// 			client.error(message);
+			// 		} else {
+			// 			client.warn(message);
+			// 		}
+			// 	}
+			// }
 
-			if (detail !== undefined && languageStatus.detail !== detail) {
-				 languageStatus.detail = detail;
-			}
-			if (languageStatus.severity !== severity) {
-				languageStatus.severity = severity;
-			}
+			// if (detail !== undefined && languageStatus.detail !== detail) {
+			// 	 languageStatus.detail = detail;
+			// }
+			// if (languageStatus.severity !== severity) {
+			// 	languageStatus.severity = severity;
+			// }
 			if (performanceInfo !== undefined) {
 				performanceInfo.reported = Math.max(performanceInfo.reported, timeTaken);
 			}

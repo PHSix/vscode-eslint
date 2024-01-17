@@ -3,7 +3,8 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import { workspace as Workspace, Uri, WorkspaceConfiguration, ConfigurationTarget } from 'vscode';
+import { workspace as Workspace, Uri, WorkspaceConfiguration,  } from 'coc.nvim';
+import { ConfigurationTarget } from './patch';
 
 import { Is } from './node-utils';
 import { DirectoryItem, ModeItem } from './shared/settings';
@@ -320,14 +321,14 @@ export class Migration {
 	}
 
 	public async update(): Promise<void> {
-		async function _update<T>(config: WorkspaceConfiguration, section: string, newValue: MigrationElement<T>, target: ConfigurationTarget): Promise<void> {
+		async function _update<T>(config: WorkspaceConfiguration, section: string, newValue: MigrationElement<T>, _target: ConfigurationTarget): Promise<void> {
 			if (!newValue.changed) {
 				return;
 			}
-			await config.update(section, newValue.value, target);
+			await config.update(section, newValue.value);
 		}
 
-		async function _updateLanguageSetting(config: WorkspaceConfiguration, section: string, settings: LanguageSettings | undefined, newValue: MigrationElement<CodeActionsOnSave>, target: ConfigurationTarget): Promise<void> {
+		async function _updateLanguageSetting(config: WorkspaceConfiguration, section: string, settings: LanguageSettings | undefined, newValue: MigrationElement<CodeActionsOnSave>, _target: ConfigurationTarget): Promise<void> {
 			if (!newValue.changed) {
 				return;
 			}
@@ -339,7 +340,7 @@ export class Migration {
 				settings['editor.codeActionsOnSave'] = {};
 			}
 			settings['editor.codeActionsOnSave'] = newValue.value;
-			await config.update(section, settings, target);
+			await config.update(section, settings);
 		}
 
 		try {

@@ -6,12 +6,9 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import {
-	workspace as Workspace, window as Window, commands as Commands, Disposable, ExtensionContext, TextDocument
-} from 'vscode';
-
-import {
+	workspace as Workspace, window as Window, commands as Commands, Disposable, ExtensionContext, TextDocument,
 	LanguageClient
-} from 'vscode-languageclient/node';
+} from 'coc.nvim';
 
 import { Validate } from './shared/settings';
 
@@ -29,7 +26,7 @@ function createDefaultConfiguration(): void {
 	const noConfigFolders = folders.filter(folder => {
 		const configFiles = ['.eslintrc.js', '.eslintrc.cjs', '.eslintrc.yaml', '.eslintrc.yml', '.eslintrc', '.eslintrc.json'];
 		for (const configFile of configFiles) {
-			if (fs.existsSync(path.join(folder.uri.fsPath, configFile))) {
+			if (fs.existsSync(path.join(folder.uri, configFile))) {
 				return false;
 			}
 		}
@@ -47,14 +44,14 @@ function createDefaultConfiguration(): void {
 		if (!folder) {
 			return;
 		}
-		const folderRootPath = folder.uri.fsPath;
-		const terminal = Window.createTerminal({
+		const folderRootPath = folder.uri;
+		const terminal = await Window.createTerminal({
 			name: `ESLint init`,
 			cwd: folderRootPath
 		});
 		const eslintCommand = await findEslint(folderRootPath);
 		terminal.sendText(`${eslintCommand} --init`);
-		terminal.show();
+		terminal.show().catch(() => {});
 	});
 }
 
@@ -138,12 +135,13 @@ function realActivate(context: ExtensionContext): void {
 			void ESLintClient.migrateSettings(client);
 		}),
 		Commands.registerCommand('eslint.restart', () => {
-			client.restart().catch((error) => client.error(`Restarting client failed`, error, 'force'));
+			client.restart();
+			// .catch((error) => client.error(`Restarting client failed`, error, 'force'));
 		})
 	);
 
 	client.start().catch((error) => {
-		client.error(`Starting the server failed.`, error, 'force');
+		client.error(`Starting the server failed.`, error);
 		const message = typeof error === 'string' ? error : typeof error.message === 'string' ? error.message : undefined;
 		if (message !== undefined && message.indexOf('ENOENT') !== -1) {
 			client.info(`PATH environment variable is: ${process.env['PATH']}`);
